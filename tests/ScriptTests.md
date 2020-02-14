@@ -1,7 +1,10 @@
 # Script Tests
 
 
-## Plain Expression
+## Query Kinds
+
+
+### Expression
 
 Suppose:
 
@@ -22,11 +25,55 @@ DateTime.Now
 ```
 
 
-## One import
+### Statements
 
 Suppose:
 
-- kind is expression
+- kind is statements
+
+Source:
+
+```
+Console.WriteLine(DateTime.Now);
+```
+
+Expected:
+
+```
+<Query Kind="Statements" />
+
+Console.WriteLine(DateTime.Now);
+```
+
+
+### Program
+
+Suppose:
+
+- kind is program
+
+Source:
+
+```
+void Main()
+{
+    Console.WriteLine(DateTime.Now);
+}
+```
+
+Expected:
+
+```
+<Query Kind="Program" />
+
+void Main()
+{
+    Console.WriteLine(DateTime.Now);
+}
+```
+
+
+## Single import
 
 Source:
 
@@ -47,11 +94,7 @@ DateTime.Now
 ```
 
 
-## Several imports
-
-Suppose:
-
-- kind is expression
+## Multiple imports
 
 Source:
 
@@ -75,10 +118,6 @@ DateTime.Now
 
 
 ## Mixed types of imports
-
-Suppose:
-
-- kind is expression
 
 Source:
 
@@ -107,10 +146,6 @@ DateTime.Now
 
 ## Imports without semi-colon termination
 
-Suppose:
-
-- kind is expression
-
 Source:
 
 ```
@@ -137,9 +172,7 @@ DateTime.Now
 
 ## Spaced-out imports
 
-Suppose:
-
-- kind is expression
+Whitespace between imports is discarded.
 
 Source:
 
@@ -171,10 +204,6 @@ DateTime.Now
 
 ## Commented-out imports
 
-Suppose:
-
-- kind is expression
-
 Source:
 
 ```
@@ -201,7 +230,73 @@ DateTime.Now
 ```
 
 
+## Comments on same line as import
+
+Source:
+
+```
+using System.Net.Http // this is a comment
+using static System.Math
+
+DateTime.Now
+```
+
+Expected:
+
+```
+<Query Kind="Expression">
+  <Namespace>System.Net.Http</Namespace>
+  <Namespace>static System.Math</Namespace>
+</Query>
+
+DateTime.Now
+```
+
+
 ## NuGet references
+
+
+### With version
+
+Source:
+
+```
+#r "nuget: System.Reactive, 4.3.2"
+using System.Reactive.Linq;
+            
+Observable.Range(1,10)
+```
+
+Expected:
+
+```
+<Query Kind="Expression">
+  <NuGetReference Version="4.3.2">System.Reactive</NuGetReference>
+  <Namespace>System.Reactive.Linq</Namespace>
+</Query>
+
+Observable.Range(1,10)
+```
+
+
+### Cannot follow imports
+
+Source:
+
+```
+using System.Reactive.Linq;
+#r "nuget: System.Reactive"
+
+Observable.Range(1,10)
+```
+
+Error expected:
+
+```
+The reference on line 2 must precede the first import: #r "nuget: System.Reactive"
+```
+
+### Commented-out
 
 Suppose:
 
@@ -210,9 +305,10 @@ Suppose:
 Source:
 
 ```
-#r "nuget: System.Reactive"
+//#r "nuget: System.Reactive"
 using System.Reactive.Linq;
-			
+//#r "nuget: System.Reactive"
+
 Observable.Range(1,10)
 ```
 
@@ -220,9 +316,11 @@ Expected:
 
 ```
 <Query Kind="Expression">
-  <NuGetReference>Rx-Main</NuGetReference>
   <Namespace>System.Reactive.Linq</Namespace>
 </Query>
+
+//#r "nuget: System.Reactive"
+//#r "nuget: System.Reactive"
 
 Observable.Range(1,10)
 ```

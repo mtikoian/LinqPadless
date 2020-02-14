@@ -29,7 +29,8 @@ namespace LinqPadless
     {
         enum RewriterState
         {
-            Scan,
+            ScanReferenceOrUsing,
+            ScanUsing,
             Using,
             UsingTrailingSpace,
             Skip,
@@ -37,7 +38,7 @@ namespace LinqPadless
 
         public static (XElement, string) Transpile(LinqPadQueryLanguage language, string source)
         {
-            var state = RewriterState.Scan;
+            var state = RewriterState.ScanReferenceOrUsing;
             var imports = new List<string>();
             var packages = new List<PackageReference>();
             var sb = new StringBuilder(source.Length);
@@ -49,7 +50,7 @@ namespace LinqPadless
                 restart:
                 switch (state)
                 {
-                    case RewriterState.Scan:
+                    case RewriterState.ScanReferenceOrUsing:
                     {
                         switch (token.Kind)
                         {
@@ -68,11 +69,28 @@ namespace LinqPadless
                                 var version = group2.Success
                                     ? NuGetVersion.TryParse(group2.Value, out var v) ? v
                                       : throw new Exception($"Invalid package version in reference (line {token.Start.Line}): {directive}")
-                                    : default;
+                                    : null;
                                 packages.Add(new PackageReference(id, version, version?.IsPrerelease ?? false));
                                 while (e.TryRead(out var t) && t.Kind != TokenKind.NewLine) { /* NOP */ }
                                 break;
                             }
+                            case TokenKind.Text:
+                            {
+                                state = RewriterState.ScanUsing;
+                                goto restart;
+                            }
+                            default:
+                            {
+                                sb.Append(source, token.Start.Offset, token.Length);
+                                break;
+                            }
+                        }
+                        break;
+                    }
+                    case RewriterState.ScanUsing:
+                    {
+                        switch (token.Kind)
+                        {
                             case TokenKind.Text:
                             {
                                 var text = source.AsSpan(token.Start.Offset, token.Length);
@@ -83,6 +101,13 @@ namespace LinqPadless
                                     break;
                                 }
                                 state = RewriterState.Skip;
+                                goto default;
+                            }
+                            case TokenKind.PreprocessorDirective:
+                            {
+                                var directive = source.AsSpan(token.Start.Offset, token.Length);
+                                if (directive.SequenceEqual("#r") || directive.StartsWith("#r "))
+                                    throw new Exception($"The reference on line {token.Start.Line} must precede the first import: {directive.ToString()}");
                                 goto default;
                             }
                             default:
@@ -111,6 +136,8 @@ namespace LinqPadless
                             case TokenKind.SingleLineComment:
                             case TokenKind.NewLine:
                             {
+                                while (char.IsWhiteSpace(ibs[^1]))
+                                    ibs.Length -= 1;
                                 imports.Add(ibs.ToString());
                                 state = RewriterState.UsingTrailingSpace;
                                 break;
@@ -157,7 +184,7 @@ namespace LinqPadless
                     {
                         if (token.Kind.HasTraits(TokenKindTraits.WhiteSpace))
                             break;
-                        state = RewriterState.Scan;
+                        state = RewriterState.ScanUsing;
                         goto restart;
                     }
                     case RewriterState.Skip:
